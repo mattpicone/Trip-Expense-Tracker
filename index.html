@@ -35,6 +35,28 @@
     <h2>Participants</h2>
     <ul id="participant-list"></ul>
 
+    <h2>Add an Expense</h2>
+    <form id="expense-form">
+      <label for="expense-description">Description:</label>
+      <input id="expense-description" required />
+
+      <label for="expense-amount">Amount:</label>
+      <input id="expense-amount" type="number" min="0.01" step="0.01" required />
+
+      <label for="paid-by">Paid by:</label>
+      <select id="paid-by" required></select>
+
+      <p>Split between:</p>
+      <div id="expense-participants"></div>
+
+      <button type="submit">Add Expense</button>
+    </form>
+
+    <p id="expense-message"></p>
+
+    <h2>Expenses</h2>
+    <ul id="expense-list"></ul>
+
     <script>
       const form = document.getElementById("trip-form");
       const tripName = document.getElementById("trip-name");
@@ -45,10 +67,37 @@
       const participantName = document.getElementById("participant-name");
       const participantMessage = document.getElementById("participant-message");
       const participantList = document.getElementById("participant-list");
+      const expenseForm = document.getElementById("expense-form");
+      const expenseDescription = document.getElementById("expense-description");
+      const expenseAmount = document.getElementById("expense-amount");
+      const paidBy = document.getElementById("paid-by");
+      const expenseParticipants = document.getElementById("expense-participants");
+      const expenseMessage = document.getElementById("expense-message");
+      const expenseList = document.getElementById("expense-list");
+
+      async function loadExpenses() {
+        const tripId = tripSelect.value;
+        expenseList.innerHTML = "";
+
+        if (!tripId) return;
+
+        const response = await fetch(`/api/expenses?trip_id=${tripId}`);
+        const expenses = await response.json();
+
+        for (const expense of expenses) {
+          const listItem = document.createElement("li");
+          const dollars = (expense.amount / 100).toFixed(2);
+          const sharedBy = expense.shared_by_names || "no one selected";
+          listItem.textContent = `${expense.description}: $${dollars}, paid by ${expense.paid_by_name}, shared by ${sharedBy}`;
+          expenseList.appendChild(listItem);
+        }
+      }
 
       async function loadParticipants() {
         const tripId = tripSelect.value;
         participantList.innerHTML = "";
+        paidBy.innerHTML = "";
+        expenseParticipants.innerHTML = "";
 
         if (!tripId) return;
 
@@ -59,6 +108,20 @@
           const listItem = document.createElement("li");
           listItem.textContent = participant.name;
           participantList.appendChild(listItem);
+
+          const option = document.createElement("option");
+          option.value = participant.id;
+          option.textContent = participant.name;
+          paidBy.appendChild(option);
+
+          const label = document.createElement("label");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = participant.id;
+          checkbox.checked = true;
+          label.appendChild(checkbox);
+          label.append(` ${participant.name}`);
+          expenseParticipants.appendChild(label);
         }
       }
 
@@ -81,6 +144,7 @@
         }
 
         loadParticipants();
+        loadExpenses();
       }
 
       form.addEventListener("submit", async (event) => {
@@ -116,7 +180,39 @@
         loadParticipants();
       });
 
-      tripSelect.addEventListener("change", loadParticipants);
+      tripSelect.addEventListener("change", () => {
+        loadParticipants();
+        loadExpenses();
+      });
+
+      expenseForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const selectedPeople = expenseParticipants.querySelectorAll(
+          "input:checked"
+        );
+        const participantIds = Array.from(selectedPeople).map((checkbox) =>
+          Number(checkbox.value)
+        );
+
+        const response = await fetch("/api/expenses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            description: expenseDescription.value,
+            amount: Math.round(Number(expenseAmount.value) * 100),
+            trip_id: Number(tripSelect.value),
+            paid_by: Number(paidBy.value),
+            participant_ids: participantIds
+          })
+        });
+
+        const expense = await response.json();
+        expenseMessage.textContent = `Added expense: ${expense.description}`;
+        expenseDescription.value = "";
+        expenseAmount.value = "";
+        loadExpenses();
+      });
 
       loadTrips();
     </script>
