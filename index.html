@@ -16,10 +16,72 @@
 
     <p id="message"></p>
 
+    <h2>Saved Trips</h2>
+    <ul id="trip-list"></ul>
+
+    <h2>Add a Participant</h2>
+    <form id="participant-form">
+      <label for="trip-select">Trip:</label>
+      <select id="trip-select" required></select>
+
+      <label for="participant-name">Name:</label>
+      <input id="participant-name" required />
+
+      <button type="submit">Add Participant</button>
+    </form>
+
+    <p id="participant-message"></p>
+
+    <h2>Participants</h2>
+    <ul id="participant-list"></ul>
+
     <script>
       const form = document.getElementById("trip-form");
       const tripName = document.getElementById("trip-name");
       const message = document.getElementById("message");
+      const tripList = document.getElementById("trip-list");
+      const participantForm = document.getElementById("participant-form");
+      const tripSelect = document.getElementById("trip-select");
+      const participantName = document.getElementById("participant-name");
+      const participantMessage = document.getElementById("participant-message");
+      const participantList = document.getElementById("participant-list");
+
+      async function loadParticipants() {
+        const tripId = tripSelect.value;
+        participantList.innerHTML = "";
+
+        if (!tripId) return;
+
+        const response = await fetch(`/api/participants?trip_id=${tripId}`);
+        const participants = await response.json();
+
+        for (const participant of participants) {
+          const listItem = document.createElement("li");
+          listItem.textContent = participant.name;
+          participantList.appendChild(listItem);
+        }
+      }
+
+      async function loadTrips() {
+        const response = await fetch("/api/trips");
+        const trips = await response.json();
+
+        tripList.innerHTML = "";
+        tripSelect.innerHTML = "";
+
+        for (const trip of trips) {
+          const listItem = document.createElement("li");
+          listItem.textContent = trip.name;
+          tripList.appendChild(listItem);
+
+          const option = document.createElement("option");
+          option.value = trip.id;
+          option.textContent = trip.name;
+          tripSelect.appendChild(option);
+        }
+
+        loadParticipants();
+      }
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -33,7 +95,30 @@
         const trip = await response.json();
         message.textContent = `Created trip: ${trip.name}`;
         tripName.value = "";
+        loadTrips();
       });
+
+      participantForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const response = await fetch("/api/participants", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: participantName.value,
+            trip_id: Number(tripSelect.value)
+          })
+        });
+
+        const participant = await response.json();
+        participantMessage.textContent = `Added participant: ${participant.name}`;
+        participantName.value = "";
+        loadParticipants();
+      });
+
+      tripSelect.addEventListener("change", loadParticipants);
+
+      loadTrips();
     </script>
   </body>
 </html>

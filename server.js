@@ -37,6 +37,44 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (request.url === "/api/participants" && request.method === "POST") {
+    let body = "";
+
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+
+    request.on("end", () => {
+      const participant = JSON.parse(body);
+      const result = database
+        .prepare("INSERT INTO participants (name, trip_id) VALUES (?, ?)")
+        .run(participant.name, participant.trip_id);
+
+      response.writeHead(201, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: result.lastInsertRowid,
+          name: participant.name,
+          trip_id: participant.trip_id
+        })
+      );
+    });
+
+    return;
+  }
+
+  if (request.url.startsWith("/api/participants?") && request.method === "GET") {
+    const url = new URL(request.url, "http://localhost");
+    const tripId = url.searchParams.get("trip_id");
+    const participants = database
+      .prepare("SELECT * FROM participants WHERE trip_id = ?")
+      .all(tripId);
+
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(participants));
+    return;
+  }
+
   fs.readFile(path.join(__dirname, "index.html"), (error, page) => {
     if (error) {
       response.writeHead(500);
