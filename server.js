@@ -3,6 +3,23 @@ const fs = require("fs");
 const path = require("path");
 const database = require("./database");
 
+function calculateBalances(participants, expenses) {
+  const balances = Object.fromEntries(participants.map((participant) => [participant, 0]));
+
+  for (const expense of expenses) {
+    const share = Math.floor(expense.amount / expense.shared_by.length);
+    let leftover = expense.amount % expense.shared_by.length;
+
+    balances[expense.paid_by] += expense.amount;
+
+    for (const person of expense.shared_by) {
+      balances[person] -= share + (leftover-- > 0 ? 1 : 0);
+    }
+  }
+
+  return balances;
+}
+
 const server = http.createServer((request, response) => {
   if (request.url === "/api/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -69,9 +86,35 @@ const server = http.createServer((request, response) => {
     const participants = database
       .prepare("SELECT * FROM participants WHERE trip_id = ?")
       .all(tripId);
+    const expenses = database
+      .prepare(`
+        SELECT expenses.id, expenses.amount, expenses.paid_by,
+               GROUP_CONCAT(expense_participants.participant_id) AS shared_by
+        FROM expenses
+        LEFT JOIN expense_participants
+          ON expenses.id = expense_participants.expense_id
+        WHERE expenses.trip_id = ?
+        GROUP BY expenses.id
+      `)
+      .all(tripId)
+      .map((expense) => ({
+        ...expense,
+        shared_by: expense.shared_by ? expense.shared_by.split(",").map(Number) : []
+      }));
+    const balances = calculateBalances(
+      participants.map((participant) => participant.id),
+      expenses
+    );
 
     response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(participants));
+    response.end(
+      JSON.stringify(
+        participants.map((participant) => ({
+          ...participant,
+          balance: balances[participant.id]
+        }))
+      )
+    );
     return;
   }
 

@@ -106,7 +106,7 @@
 
         for (const participant of participants) {
           const listItem = document.createElement("li");
-          listItem.textContent = participant.name;
+          listItem.textContent = `${participant.name}: $${(participant.balance / 100).toFixed(2)}`;
           participantList.appendChild(listItem);
 
           const option = document.createElement("option");
@@ -211,6 +211,7 @@
         expenseMessage.textContent = `Added expense: ${expense.description}`;
         expenseDescription.value = "";
         expenseAmount.value = "";
+        loadParticipants();
         loadExpenses();
       });
 
