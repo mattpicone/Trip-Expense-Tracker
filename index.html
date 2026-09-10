@@ -8,22 +8,26 @@
   <body>
     <h1>Trip Expense Tracker</h1>
 
+    <nav><a href="/">All Trips</a></nav>
+    <p id="message"></p>
+
+    <section id="trips-page" hidden>
+      <h2>Saved Trips</h2>
+      <button type="button" onclick="location.href='/trips/new'">New Trip</button>
+      <ul id="trip-list"></ul>
+    </section>
+
+    <section id="setup-page" hidden>
+    <h2 id="setup-title">New Trip</h2>
     <form id="trip-form">
       <label for="trip-name">Trip name:</label>
       <input id="trip-name" required />
       <button type="submit">Create Trip</button>
     </form>
 
-    <p id="message"></p>
-
-    <h2>Saved Trips</h2>
-    <ul id="trip-list"></ul>
-
+    <div id="participant-setup" hidden>
     <h2>Add a Participant</h2>
     <form id="participant-form">
-      <label for="trip-select">Trip:</label>
-      <select id="trip-select" required></select>
-
       <label for="participant-name">Name:</label>
       <input id="participant-name" required />
 
@@ -32,11 +36,21 @@
 
     <p id="participant-message"></p>
 
-    <h2>Participants</h2>
-    <ul id="participant-list"></ul>
+    <ul id="setup-participant-list"></ul>
+    <a id="view-expenses" href="/">Continue to Expenses</a>
+    </div>
+    </section>
 
-    <h2>Add an Expense</h2>
-    <form id="expense-form">
+    <section id="expenses-page" hidden>
+    <h2 id="expense-trip-name"></h2>
+    <h3>Participants &amp; Balances</h3>
+    <ul id="participant-list"></ul>
+    <a id="edit-participants" href="/">Add Participants</a>
+
+    <h3>Expenses</h3>
+    <ul id="expense-list"></ul>
+    <button id="show-expense-form" type="button">Add Expense</button>
+    <form id="expense-form" hidden>
       <label for="expense-description">Description:</label>
       <input id="expense-description" required />
 
@@ -54,12 +68,9 @@
 
     <p id="expense-message"></p>
 
-    <h2>Expenses</h2>
-    <ul id="expense-list"></ul>
-
-    <h2>Settle Up</h2>
-    <button id="settle-balances" type="button">Show settlements</button>
+    <button id="settle-balances" type="button">Settle Up</button>
     <ul id="settlement-list"></ul>
+    </section>
 
     <script>
       const form = document.getElementById("trip-form");
@@ -67,7 +78,16 @@
       const message = document.getElementById("message");
       const tripList = document.getElementById("trip-list");
       const participantForm = document.getElementById("participant-form");
-      const tripSelect = document.getElementById("trip-select");
+      const tripRoute = location.pathname.match(/^\/trips\/(\d+)(\/setup)?\/?$/);
+      const selectedTripId = tripRoute ? tripRoute[1] : "";
+      const isSetup = location.pathname === "/trips/new" || Boolean(tripRoute?.[2]);
+      document.getElementById("trips-page").hidden = isSetup || Boolean(selectedTripId);
+      document.getElementById("setup-page").hidden = !isSetup;
+      document.getElementById("expenses-page").hidden = isSetup || !selectedTripId;
+      form.hidden = Boolean(selectedTripId);
+      document.getElementById("participant-setup").hidden = !selectedTripId;
+      document.getElementById("view-expenses").href = `/trips/${selectedTripId}`;
+      document.getElementById("edit-participants").href = `/trips/${selectedTripId}/setup`;
       const participantName = document.getElementById("participant-name");
       const participantMessage = document.getElementById("participant-message");
       const participantList = document.getElementById("participant-list");
@@ -82,7 +102,7 @@
       const settlementList = document.getElementById("settlement-list");
 
       async function loadSettlements() {
-        const tripId = tripSelect.value;
+        const tripId = selectedTripId;
         settlementList.innerHTML = "";
 
         if (!tripId) return;
@@ -103,7 +123,7 @@
       }
 
       async function loadExpenses() {
-        const tripId = tripSelect.value;
+        const tripId = selectedTripId;
         expenseList.innerHTML = "";
 
         if (!tripId) return;
@@ -121,8 +141,9 @@
       }
 
       async function loadParticipants() {
-        const tripId = tripSelect.value;
+        const tripId = selectedTripId;
         participantList.innerHTML = "";
+        document.getElementById("setup-participant-list").innerHTML = "";
         paidBy.innerHTML = "";
         expenseParticipants.innerHTML = "";
 
@@ -135,6 +156,9 @@
           const listItem = document.createElement("li");
           listItem.textContent = `${participant.name}: $${(participant.balance / 100).toFixed(2)}`;
           participantList.appendChild(listItem);
+          const setupItem = document.createElement("li");
+          setupItem.textContent = participant.name;
+          document.getElementById("setup-participant-list").appendChild(setupItem);
 
           const option = document.createElement("option");
           option.value = participant.id;
@@ -157,17 +181,20 @@
         const trips = await response.json();
 
         tripList.innerHTML = "";
-        tripSelect.innerHTML = "";
+
 
         for (const trip of trips) {
           const listItem = document.createElement("li");
-          listItem.textContent = trip.name;
+          const link = document.createElement("a");
+          link.href = `/trips/${trip.id}`;
+          link.textContent = trip.name;
+          listItem.appendChild(link);
           tripList.appendChild(listItem);
 
-          const option = document.createElement("option");
-          option.value = trip.id;
-          option.textContent = trip.name;
-          tripSelect.appendChild(option);
+          if (String(trip.id) === selectedTripId) {
+            document.getElementById("expense-trip-name").textContent = trip.name;
+            document.getElementById("setup-title").textContent = trip.name;
+          }
         }
 
         loadParticipants();
@@ -184,9 +211,7 @@
         });
 
         const trip = await response.json();
-        message.textContent = `Created trip: ${trip.name}`;
-        tripName.value = "";
-        loadTrips();
+        location.href = `/trips/${trip.id}/setup`;
       });
 
       participantForm.addEventListener("submit", async (event) => {
@@ -197,7 +222,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: participantName.value,
-            trip_id: Number(tripSelect.value)
+            trip_id: Number(selectedTripId)
           })
         });
 
@@ -207,10 +232,9 @@
         loadParticipants();
       });
 
-      tripSelect.addEventListener("change", () => {
-        loadParticipants();
-        loadExpenses();
-        settlementList.innerHTML = "";
+      document.getElementById("show-expense-form").addEventListener("click", () => {
+        expenseForm.hidden = !expenseForm.hidden;
+        if (!expenseForm.hidden) expenseDescription.focus();
       });
 
       settleBalancesButton.addEventListener("click", loadSettlements);
@@ -236,7 +260,7 @@
           body: JSON.stringify({
             description: expenseDescription.value,
             amount: Math.round(Number(expenseAmount.value) * 100),
-            trip_id: Number(tripSelect.value),
+            trip_id: Number(selectedTripId),
             paid_by: Number(paidBy.value),
             participant_ids: participantIds
           })
@@ -246,6 +270,8 @@
         expenseMessage.textContent = `Added expense: ${expense.description}`;
         expenseDescription.value = "";
         expenseAmount.value = "";
+        expenseForm.hidden = true;
+        settlementList.innerHTML = "";
         loadParticipants();
         loadExpenses();
       });
