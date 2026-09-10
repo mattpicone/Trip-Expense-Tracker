@@ -225,6 +225,11 @@
           Number(checkbox.value)
         );
 
+        if (participantIds.length === 0) {
+          expenseMessage.textContent = "Select at least one person to split between.";
+          return;
+        }
+
         const response = await fetch("/api/expenses", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
