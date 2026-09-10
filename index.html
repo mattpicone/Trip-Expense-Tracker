@@ -57,6 +57,10 @@
     <h2>Expenses</h2>
     <ul id="expense-list"></ul>
 
+    <h2>Settle Up</h2>
+    <button id="settle-balances" type="button">Show settlements</button>
+    <ul id="settlement-list"></ul>
+
     <script>
       const form = document.getElementById("trip-form");
       const tripName = document.getElementById("trip-name");
@@ -74,6 +78,29 @@
       const expenseParticipants = document.getElementById("expense-participants");
       const expenseMessage = document.getElementById("expense-message");
       const expenseList = document.getElementById("expense-list");
+      const settleBalancesButton = document.getElementById("settle-balances");
+      const settlementList = document.getElementById("settlement-list");
+
+      async function loadSettlements() {
+        const tripId = tripSelect.value;
+        settlementList.innerHTML = "";
+
+        if (!tripId) return;
+
+        const response = await fetch(`/api/settlements?trip_id=${tripId}`);
+        const settlements = await response.json();
+
+        if (settlements.length === 0) {
+          settlementList.textContent = "Everyone is settled up.";
+          return;
+        }
+
+        for (const settlement of settlements) {
+          const listItem = document.createElement("li");
+          listItem.textContent = `${settlement.from} pays ${settlement.to} $${(settlement.amount / 100).toFixed(2)}`;
+          settlementList.appendChild(listItem);
+        }
+      }
 
       async function loadExpenses() {
         const tripId = tripSelect.value;
@@ -183,7 +210,10 @@
       tripSelect.addEventListener("change", () => {
         loadParticipants();
         loadExpenses();
+        settlementList.innerHTML = "";
       });
+
+      settleBalancesButton.addEventListener("click", loadSettlements);
 
       expenseForm.addEventListener("submit", async (event) => {
         event.preventDefault();

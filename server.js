@@ -20,6 +20,30 @@ function calculateBalances(participants, expenses) {
   return balances;
 }
 
+function settle_balances(balances) {
+  const debtors = Object.entries(balances)
+    .filter(([, amount]) => amount < 0)
+    .map(([person, amount]) => [person, -amount]);
+  const creditors = Object.entries(balances)
+    .filter(([, amount]) => amount > 0)
+    .map(([person, amount]) => [person, amount]);
+  const transfers = [];
+  let debtor = 0;
+  let creditor = 0;
+
+  while (debtor < debtors.length && creditor < creditors.length) {
+    const amount = Math.min(debtors[debtor][1], creditors[creditor][1]);
+    transfers.push([debtors[debtor][0], creditors[creditor][0], amount]);
+    debtors[debtor][1] -= amount;
+    creditors[creditor][1] -= amount;
+
+    if (debtors[debtor][1] === 0) debtor += 1;
+    if (creditors[creditor][1] === 0) creditor += 1;
+  }
+
+  return transfers;
+}
+
 const server = http.createServer((request, response) => {
   if (request.url === "/api/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -115,6 +139,45 @@ const server = http.createServer((request, response) => {
         }))
       )
     );
+    return;
+  }
+
+  if (request.url.startsWith("/api/settlements?") && request.method === "GET") {
+    const url = new URL(request.url, "http://localhost");
+    const tripId = url.searchParams.get("trip_id");
+    const participants = database
+      .prepare("SELECT * FROM participants WHERE trip_id = ?")
+      .all(tripId);
+    const expenses = database
+      .prepare(`
+        SELECT expenses.id, expenses.amount, expenses.paid_by,
+               GROUP_CONCAT(expense_participants.participant_id) AS shared_by
+        FROM expenses
+        LEFT JOIN expense_participants
+          ON expenses.id = expense_participants.expense_id
+        WHERE expenses.trip_id = ?
+        GROUP BY expenses.id
+      `)
+      .all(tripId)
+      .map((expense) => ({
+        ...expense,
+        shared_by: expense.shared_by ? expense.shared_by.split(",").map(Number) : []
+      }));
+    const balances = calculateBalances(
+      participants.map((participant) => participant.id),
+      expenses
+    );
+    const names = Object.fromEntries(
+      participants.map((participant) => [participant.id, participant.name])
+    );
+    const settlements = settle_balances(balances).map(([from, to, amount]) => ({
+      from: names[from],
+      to: names[to],
+      amount
+    }));
+
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(settlements));
     return;
   }
 
